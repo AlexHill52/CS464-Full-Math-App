@@ -7,15 +7,19 @@
 
 import Foundation
 import SwiftData
+import Foundation
+import SwiftData
 
 @Model
 final class ExperimentData {
+    @Attribute(.unique) var id: UUID
     var participantId: String
     var dayNumber: Int
     var problemsSolved: Int
     var timestamp: Date
     
     init(participantId: String, dayNumber: Int, problemsSolved: Int = 0, timestamp: Date = Date()) {
+        self.id = UUID()
         self.participantId = participantId
         self.dayNumber = dayNumber
         self.problemsSolved = problemsSolved
@@ -25,6 +29,7 @@ final class ExperimentData {
 
 @Model
 final class NotificationRecord {
+    @Attribute(.unique) var id: UUID
     var participantId: String
     var notificationLevel: String // "direct", "polite", "affable"
     var notificationSentTime: Date
@@ -45,6 +50,7 @@ final class NotificationRecord {
          timestamp: Date = Date(),
          dayNumber: Int = 1) {
         
+        self.id = UUID()
         self.participantId = participantId
         self.notificationLevel = notificationLevel
         self.notificationSentTime = notificationSentTime

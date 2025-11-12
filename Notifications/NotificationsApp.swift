@@ -1,28 +1,45 @@
-//
-//  NotificationsApp.swift
-//  Notifications
-//
-//  Created by Jeff on 10/23/25.
-//
-
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 @main
 struct NotificationsApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            ExperimentData.self,
+            NotificationRecord.self
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
+        
+        let modelConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false,
+            allowsSave: true
+        )
+        
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            print("✅ ModelContainer created successfully")
+            return container
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            print("❌ Fatal error creating ModelContainer: \(error)")
+            print("Error details: \(error.localizedDescription)")
+            
+            // Try to create with in-memory fallback
+            let fallbackConfig = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: true
+            )
+            
+            do {
+                let fallbackContainer = try ModelContainer(for: schema, configurations: [fallbackConfig])
+                print("⚠️ Using in-memory ModelContainer as fallback")
+                return fallbackContainer
+            } catch {
+                fatalError("Could not create ModelContainer even with fallback: \(error)")
+            }
         }
     }()
-
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
