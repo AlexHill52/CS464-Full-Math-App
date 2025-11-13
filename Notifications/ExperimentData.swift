@@ -1,14 +1,6 @@
-//
-//  ExperimentData.swift
-//  Notifications
-//
-//  Created by Kalena Lam on 11/11/25.
-//
-
 import Foundation
 import SwiftData
-import Foundation
-import SwiftData
+import SwiftUI
 
 @Model
 final class ExperimentData {
@@ -31,10 +23,10 @@ final class ExperimentData {
 final class NotificationRecord {
     @Attribute(.unique) var id: UUID
     var participantId: String
-    var notificationLevel: String // "direct", "polite", "affable"
+    var notificationLevel: String
     var notificationSentTime: Date
     var notificationClickedTime: Date?
-    var responseLatency: Double? // in seconds
+    var responseLatency: Double?
     var problemsAttempted: Int
     var problemsCorrect: Int
     var timestamp: Date
@@ -62,3 +54,4 @@ final class NotificationRecord {
         self.dayNumber = dayNumber
     }
 }
+

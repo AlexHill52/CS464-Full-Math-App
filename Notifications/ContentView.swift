@@ -30,6 +30,7 @@ struct ContentView: View {
                         participantId: $participantId,
                         onConsent: {
                             hasConsented = true
+                            saveParticipantId()  // Save to UserDefaults
                             requestNotificationPermission()
                             currentScreen = .dashboard
                         }
@@ -78,19 +79,61 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            loadParticipantId()  // Restore from UserDefaults
             checkNotificationPermission()
-            scheduleAllNotifications()
-            checkScheduledNotifications()
+            if !participantId.isEmpty && hasConsented {
+                scheduleAllNotifications()
+            }
+            calculateCurrentDay()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenMathProblems"))) { notification in
+            // Handle notification tap - open math problems
+            if let userInfo = notification.userInfo,
+               let participantId = userInfo["participantId"] as? String {
+                self.participantId = participantId
+                self.currentScreen = .mathProblems
+            }
         }
     }
+    
+    // MARK: - Persistence Functions
+    
+    func saveParticipantId() {
+        UserDefaults.standard.set(participantId, forKey: "participantId")
+        UserDefaults.standard.set(hasConsented, forKey: "hasConsented")
+        UserDefaults.standard.set(Date(), forKey: "studyStartDate")
+        print("💾 Saved participant ID: \(participantId)")
+    }
+    
+    func loadParticipantId() {
+        if let savedId = UserDefaults.standard.string(forKey: "participantId") {
+            participantId = savedId
+            hasConsented = UserDefaults.standard.bool(forKey: "hasConsented")
+            if hasConsented {
+                currentScreen = .dashboard
+            }
+            print("📂 Loaded participant ID: \(participantId)")
+        }
+    }
+    
+    func calculateCurrentDay() {
+        if let startDate = UserDefaults.standard.object(forKey: "studyStartDate") as? Date {
+            let days = Calendar.current.dateComponents([.day], from: startDate, to: Date()).day ?? 0
+            currentDayNumber = min(days + 1, 7)
+        }
+    }
+    
+    // MARK: - Notification Functions
     
     func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { success, error in
             DispatchQueue.main.async {
                 notificationsEnabled = success
                 if success {
+                    print("✅ Notifications authorized")
                     scheduleAllNotifications()
-                    checkScheduledNotifications()
+                } else {
+                    print("❌ Notifications denied: \(error?.localizedDescription ?? "unknown")")
                 }
             }
         }
@@ -105,7 +148,10 @@ struct ContentView: View {
     }
     
     func scheduleAllNotifications() {
-        guard notificationsEnabled, !participantId.isEmpty else { return }
+        guard notificationsEnabled, !participantId.isEmpty else {
+            print("⚠️ Cannot schedule notifications - enabled: \(notificationsEnabled), ID: \(participantId)")
+            return
+        }
         
         // Cancel existing notifications
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
@@ -149,19 +195,15 @@ struct ContentView: View {
         
         for day in 0..<totalDays {
             for (timeIndex, hour) in times.enumerated() {
-                let levelIndex = timeIndex // 10am=direct, 2pm=polite, 6pm=affable
-                let messageIndex = day % 7 // Cycle through 7 messages for each level
+                let levelIndex = timeIndex
+                let messageIndex = day % 7
                 
                 let message: String
                 switch levelIndex {
-                case 0: // direct
-                    message = directMessages[messageIndex]
-                case 1: // polite
-                    message = politeMessages[messageIndex]
-                case 2: // affable
-                    message = affableMessages[messageIndex]
-                default:
-                    message = "Please complete your math problems."
+                case 0: message = directMessages[messageIndex]
+                case 1: message = politeMessages[messageIndex]
+                case 2: message = affableMessages[messageIndex]
+                default: message = "Please complete your math problems."
                 }
                 
                 let content = UNMutableNotificationContent()
@@ -176,14 +218,12 @@ struct ContentView: View {
                     "timeIndex": timeIndex
                 ]
                 
-                // Calculate the specific date for this notification
                 var dateComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: now)
                 dateComponents.hour = hour
                 dateComponents.minute = 0
                 
                 if let baseDate = calendar.date(from: dateComponents) {
                     if let notificationDate = calendar.date(byAdding: .day, value: day, to: baseDate) {
-                        // Only schedule if it's in the future
                         if notificationDate > now {
                             let triggerComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: notificationDate)
                             let trigger = UNCalendarNotificationTrigger(dateMatching: triggerComponents, repeats: false)
@@ -195,15 +235,18 @@ struct ContentView: View {
                                 trigger: trigger
                             )
                             
-                            UNUserNotificationCenter.current().add(request)
-                            print("Scheduled: Day \(day+1) \(hour):00 - \(levels[levelIndex])")
+                            UNUserNotificationCenter.current().add(request) { error in
+                                if let error = error {
+                                    print("❌ Error scheduling notification: \(error)")
+                                }
+                            }
                         }
                     }
                 }
             }
         }
         
-        print("Scheduled \(totalDays * times.count) notifications for participant \(participantId)")
+        print("✅ Scheduled \(totalDays * times.count) notifications for participant \(participantId)")
     }
     
     func checkScheduledNotifications() {
@@ -236,81 +279,76 @@ struct ContentView: View {
     func scheduleTestNotification() {
         let content = UNMutableNotificationContent()
         content.title = "Math Problems - TEST"
-        content.body = "This is a test notification. Please complete your math problems."
+        content.body = "This is a test notification. Tap to open math problems."
         content.sound = .default
         content.userInfo = [
             "level": "test",
             "participantId": participantId,
-            "scheduledTime": Date().timeIntervalSince1970
+            "scheduledTime": Date().timeIntervalSince1970,
+            "day": 1,
+            "timeIndex": 0
         ]
         
-        // Trigger in 5 seconds
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
-        let request = UNNotificationRequest(identifier: "test-notification-\(UUID())", content: content, trigger: trigger)
+        let request = UNNotificationRequest(identifier: "test-\(UUID())", content: content, trigger: trigger)
         
         UNUserNotificationCenter.current().add(request)
         print("✅ Test notification scheduled for 5 seconds from now")
     }
-
-    func scheduleMultipleTestNotifications() {
-        let testMessages = [
-            "Test 1: Direct style notification",
-            "Test 2: Polite style notification",
-            "Test 3: Affable style notification 🎉"
-        ]
+    
+    // MARK: - Data Functions
+    
+    func recordProblemCompletion(attempted: Int, correct: Int) {
+        // Find the most recent notification record that hasn't been completed
+        let descriptor = FetchDescriptor<NotificationRecord>(
+            predicate: #Predicate { record in
+                record.participantId == participantId &&
+                record.problemsAttempted == 0
+            },
+            sortBy: [SortDescriptor(\.notificationClickedTime, order: .reverse)]
+        )
         
-        for (index, message) in testMessages.enumerated() {
-            let content = UNMutableNotificationContent()
-            content.title = "Math Problems - TEST"
-            content.body = message
-            content.sound = .default
-            content.userInfo = [
-                "level": "test",
-                "participantId": participantId,
-                "scheduledTime": Date().timeIntervalSince1970
-            ]
-            
-            // Schedule each test 10 seconds apart
-            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(5 + (index * 10)), repeats: false)
-            let request = UNNotificationRequest(identifier: "test-batch-\(UUID())", content: content, trigger: trigger)
-            
-            UNUserNotificationCenter.current().add(request)
-            print("✅ Test notification \(index + 1) scheduled")
+        do {
+            let records = try modelContext.fetch(descriptor)
+            if let recentRecord = records.first {
+                recentRecord.problemsAttempted = attempted
+                recentRecord.problemsCorrect = correct
+                try modelContext.save()
+                print("✅ Updated notification record with problem results: \(correct)/\(attempted)")
+            } else {
+                // If no notification record found, create standalone record
+                let record = NotificationRecord(
+                    participantId: participantId,
+                    notificationLevel: "manual",
+                    notificationSentTime: Date(),
+                    notificationClickedTime: Date(),
+                    responseLatency: 0,
+                    problemsAttempted: attempted,
+                    problemsCorrect: correct,
+                    dayNumber: currentDayNumber
+                )
+                modelContext.insert(record)
+                try modelContext.save()
+                print("✅ Created new record for manual problem completion")
+            }
+        } catch {
+            print("❌ Error recording problem completion: \(error)")
         }
     }
     
-    // Data Retrieval Functions
     func getNotificationStats() {
-        let directNotifications = notificationRecords.filter { $0.notificationLevel == "direct" && $0.participantId == participantId }
-        let politeNotifications = notificationRecords.filter { $0.notificationLevel == "polite" && $0.participantId == participantId }
-        let affableNotifications = notificationRecords.filter { $0.notificationLevel == "affable" && $0.participantId == participantId }
+        let allRecords = notificationRecords.filter { $0.participantId == participantId }
+        
+        let directNotifications = allRecords.filter { $0.notificationLevel == "direct" }
+        let politeNotifications = allRecords.filter { $0.notificationLevel == "polite" }
+        let affableNotifications = allRecords.filter { $0.notificationLevel == "affable" }
         
         print("=== NOTIFICATION STATS ===")
+        print("Total records: \(allRecords.count)")
         print("Direct notifications: \(directNotifications.count)")
         print("Polite notifications: \(politeNotifications.count)")
         print("Affable notifications: \(affableNotifications.count)")
-        
-        // Print details for each type
-        printNotificationDetails(notifications: directNotifications, level: "Direct")
-        printNotificationDetails(notifications: politeNotifications, level: "Polite")
-        printNotificationDetails(notifications: affableNotifications, level: "Affable")
         print("==========================")
-    }
-    
-    func printNotificationDetails(notifications: [NotificationRecord], level: String) {
-        if !notifications.isEmpty {
-            print("\n\(level) Notifications:")
-            for notification in notifications.sorted(by: { $0.dayNumber < $1.dayNumber }) {
-                let clicked = notification.notificationClickedTime != nil ? "YES" : "NO"
-                let latency = notification.responseLatency != nil ? "\(Int(notification.responseLatency!))s" : "N/A"
-                let accuracy = notification.problemsAttempted > 0 ?
-                    "\(Int(Double(notification.problemsCorrect) / Double(notification.problemsAttempted) * 100))%" : "N/A"
-                
-                print("  Day \(notification.dayNumber): Clicked=\(clicked), Latency=\(latency), Problems=\(notification.problemsCorrect)/\(notification.problemsAttempted), Accuracy=\(accuracy)")
-            }
-        } else {
-            print("\n\(level) Notifications: None recorded")
-        }
     }
     
     func getResponseRatesByLevel() {
@@ -318,23 +356,15 @@ struct ContentView: View {
         
         print("=== RESPONSE RATES BY LEVEL ===")
         for level in levels {
-            let notifications = notificationRecords.filter { $0.notificationLevel == level && $0.participantId == participantId }
+            let notifications = notificationRecords.filter {
+                $0.notificationLevel == level && $0.participantId == participantId
+            }
             let clickedCount = notifications.filter { $0.notificationClickedTime != nil }.count
-            let responseRate = notifications.count > 0 ? Double(clickedCount) / Double(notifications.count) * 100 : 0
+            let responseRate = notifications.count > 0 ?
+                Double(clickedCount) / Double(notifications.count) * 100 : 0
             
             print("\(level.capitalized): \(clickedCount)/\(notifications.count) (\(String(format: "%.1f", responseRate))%)")
         }
         print("===============================")
-    }
-    
-    func recordProblemCompletion(attempted: Int, correct: Int) {
-        let record = NotificationRecord(
-            participantId: participantId,
-            notificationLevel: "test",
-            notificationSentTime: Date(),
-            problemsAttempted: attempted,
-            problemsCorrect: correct
-        )
-        modelContext.insert(record)
     }
 }

@@ -6,10 +6,10 @@ struct DashboardView: View {
     var notificationsEnabled: Bool
     var onStartProblems: () -> Void
     var onViewResults: () -> Void
-    var onTestNotification: () -> Void
-    var onCheckScheduled: () -> Void
-    var onGetStats: () -> Void
-    var onGetResponseRates: () -> Void
+    var onTestNotification: (() -> Void)? = nil
+    var onCheckScheduled: (() -> Void)? = nil
+    var onGetStats: (() -> Void)? = nil
+    var onGetResponseRates: (() -> Void)? = nil
     @State private var showDebugMenu = false
     
     var body: some View {
@@ -115,20 +115,27 @@ struct DashboardView: View {
             }
         }
         .padding(.vertical)
-        // Long press gesture for debug menu
+        // Long press gesture for debug menu (only if debug functions are provided)
         .gesture(
             LongPressGesture(minimumDuration: 2.0)
                 .onEnded { _ in
-                    showDebugMenu = true
+                    if onTestNotification != nil { // Only show if debug functions exist
+                        showDebugMenu = true
+                    }
                 }
         )
         .sheet(isPresented: $showDebugMenu) {
-            DebugTestView(
-                onTestNotification: onTestNotification,
-                onCheckScheduled: onCheckScheduled,
-                onGetStats: onGetStats,
-                onGetResponseRates: onGetResponseRates
-            )
+            if let onTestNotification = onTestNotification,
+               let onCheckScheduled = onCheckScheduled,
+               let onGetStats = onGetStats,
+               let onGetResponseRates = onGetResponseRates {
+                DebugTestView(
+                    onTestNotification: onTestNotification,
+                    onCheckScheduled: onCheckScheduled,
+                    onGetStats: onGetStats,
+                    onGetResponseRates: onGetResponseRates
+                )
+            }
         }
     }
 }
