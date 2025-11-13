@@ -1,4 +1,5 @@
 import SwiftUI
+
 struct MathProblemsView: View {
     var participantId: String
     var onComplete: (Int, Int) -> Void
@@ -121,20 +122,23 @@ struct MathProblemsView: View {
     
     func generateProblems() {
         problems = (0..<3).map { _ in
-            let num1 = Int.random(in: 1...20)
-            let num2 = Int.random(in: 1...20)
-            let ops = ["+", "-", "*"]
-            let op = ops.randomElement()!
+            // Randomly choose between addition and multiplication
+            let useMultiplication = Bool.random()
             
-            let result: Int
-            switch op {
-            case "+": result = num1 + num2
-            case "-": result = num1 - num2
-            case "*": result = num1 * num2
-            default: result = 0
+            if useMultiplication {
+                // Multiplication table questions (1-10 × 1-10)
+                let num1 = Int.random(in: 1...10)
+                let num2 = Int.random(in: 1...10)
+                let result = num1 * num2
+                return ("\(num1) × \(num2)", result)
+            } else {
+                // Easy addition (results 0-100, no negatives)
+                let num1 = Int.random(in: 1...50)
+                let maxNum2 = min(50, 100 - num1) // Ensure sum doesn't exceed 100
+                let num2 = Int.random(in: 1...maxNum2)
+                let result = num1 + num2
+                return ("\(num1) + \(num2)", result)
             }
-            
-            return ("\(num1) \(op) \(num2)", result)
         }
     }
     
